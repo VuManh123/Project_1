@@ -1,85 +1,121 @@
-import java.util.*;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Scanner;
+import java.util.TreeMap;
 
 class Submission {
     String userID;
     String problemID;
-    Date timePoint;
+    String timePoint;
     String status;
     int point;
-
-    public Submission(String userID, String problemID, Date timePoint, String status, int point) {
-        this.userID = userID;
-        this.problemID = problemID;
-        this.timePoint = timePoint;
-        this.status = status;
-        this.point = point;
-    }
 }
 @SuppressWarnings({"unchecked", "deprecation"})
 public class AnalyzeCodeSubmission {
-    public static void main(String[] args) throws ParseException {
-        Scanner scanner = new Scanner(System.in);
+    public static void main(String[] args) {
         List<Submission> submissions = new ArrayList<>();
+        Map<String, Integer> errorSubmissionCount = new HashMap<>();
+        Map<String, TreeMap<Integer, Integer>> maxPointsByUserAndProblem = new HashMap<>();
+        List<String> submissionTimes = new ArrayList<>();
 
-        // Read and process the first block of data
-        String line;
-        SimpleDateFormat dateFormat = new SimpleDateFormat("HH:mm:ss");
-        while (!(line = scanner.nextLine()).equals("#")) {
-            String[] parts = line.split(" ");
-            String userID = parts[0];
-            String problemID = parts[1];
-            Date timePoint = dateFormat.parse(parts[2]);
-            String status = parts[3];
-            int point = Integer.parseInt(parts[4]);
-            submissions.add(new Submission(userID, problemID, timePoint, status, point));
+        Scanner scanner = new Scanner(System.in);
+        while (true) {
+            String input = scanner.next();
+            if (input.charAt(0) == '#') {
+                break;
+            }
+
+            Submission submission = new Submission();
+            submission.userID = input;
+            submission.problemID = scanner.next();
+            submission.timePoint = scanner.next();
+            submission.status = scanner.next();
+            submission.point = scanner.nextInt();
+            submissions.add(submission);
+            submissionTimes.add(submission.timePoint);
+
+            if (submission.status.equals("ERR")) {
+                errorSubmissionCount.put(submission.userID, errorSubmissionCount.getOrDefault(submission.userID, 0) + 1);
+            }
+
+            int problemIndex = Integer.parseInt(submission.problemID.substring(1));
+            maxPointsByUserAndProblem.computeIfAbsent(submission.userID, k -> new TreeMap<>())
+                    .put(problemIndex, Math.max(maxPointsByUserAndProblem.get(submission.userID).getOrDefault(problemIndex, 0), submission.point));
         }
 
-        // Process the queries in the second block
-        while (!(line = scanner.nextLine()).equals("#")) {
-            if (line.equals("?total_number_submissions")) {
+        submissionTimes.sort(null);
+
+        while (true) {
+            String query = scanner.next();
+            if (query.charAt(0) == '#') {
+                break;
+            }
+
+            if (query.equals("?total_number_submissions")) {
                 System.out.println(submissions.size());
-            } else if (line.equals("?number_error_submision")) {
-                int errorSubmissions = 0;
+            } else if (query.equals("?number_error_submision")) {
+                int numErrorSubmissions = 0;
                 for (Submission submission : submissions) {
                     if (submission.status.equals("ERR")) {
-                        errorSubmissions++;
+                        numErrorSubmissions++;
                     }
                 }
-                System.out.println(errorSubmissions);
-            } else if (line.startsWith("?number_error_submision_of_user")) {
-                String[] parts = line.split(" ");
-                String userID = parts[1];
-                int errorSubmissions = 0;
-                for (Submission submission : submissions) {
-                    if (submission.userID.equals(userID) && submission.status.equals("ERR")) {
-                        errorSubmissions++;
+                System.out.println(numErrorSubmissions);
+            } else if (query.equals("?number_error_submision_of_user")) {
+                String targetUserID = scanner.next();
+                int numErrorSubmissionsOfUser = errorSubmissionCount.getOrDefault(targetUserID, 0);
+                System.out.println(numErrorSubmissionsOfUser);
+            } else if (query.equals("?total_point_of_user")) {
+                String userID = scanner.next();
+                int totalPoint = 0;
+                if (maxPointsByUserAndProblem.containsKey(userID)) {
+                    for (Map.Entry<Integer, Integer> problem : maxPointsByUserAndProblem.get(userID).entrySet()) {
+                        totalPoint += problem.getValue();
                     }
                 }
-                System.out.println(errorSubmissions);
-            } else if (line.startsWith("?total_point_of_user")) {
-                String[] parts = line.split(" ");
-                String userID = parts[1];
-                int totalPoints = 0;
-                for (Submission submission : submissions) {
-                    if (submission.userID.equals(userID)) {
-                        totalPoints = Math.max(totalPoints, submission.point);
-                    }
-                }
-                System.out.println(totalPoints);
-            } else if (line.startsWith("?number_submission_period")) {
-                String[] parts = line.split(" ");
-                Date fromTimePoint = dateFormat.parse(parts[1]);
-                Date toTimePoint = dateFormat.parse(parts[2]);
-                int submissionsInPeriod = 0;
-                for (Submission submission : submissions) {
-                    if (submission.timePoint.compareTo(fromTimePoint) >= 0 && submission.timePoint.compareTo(toTimePoint) <= 0) {
-                        submissionsInPeriod++;
-                    }
-                }
-                System.out.println(submissionsInPeriod);
+                System.out.println(totalPoint);
+            } else if (query.equals("?number_submission_period")) {
+                String fromTime = scanner.next();
+                String toTime = scanner.next();
+
+                int startTimeIndex = lowerBound(submissionTimes, fromTime);
+                int endTimeIndex = upperBound(submissionTimes, toTime);
+
+                int numSubmissionsInPeriod = endTimeIndex - startTimeIndex;
+                System.out.println(numSubmissionsInPeriod);
             }
         }
+    }
+
+    // Binary search for lower bound
+    private static int lowerBound(List<String> list, String value) {
+        int left = 0;
+        int right = list.size();
+        while (left < right) {
+            int mid = left + (right - left) / 2;
+            if (list.get(mid).compareTo(value) < 0) {
+                left = mid + 1;
+            } else {
+                right = mid;
+            }
+        }
+        return left;
+    }
+
+    // Binary search for upper bound
+    private static int upperBound(List<String> list, String value) {
+        int left = 0;
+        int right = list.size();
+        while (left < right) {
+            int mid = left + (right - left) / 2;
+            if (list.get(mid).compareTo(value) <= 0) {
+                left = mid + 1;
+            } else {
+                right = mid;
+            }
+        }
+        return left;
     }
 }
